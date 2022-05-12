@@ -27,7 +27,7 @@ def indicadores_titanic():
         return True
     
     @task
-    def emr_process_titanic(sucess_before: bool):
+    def emr_process_titanic(success_before: bool):
         if success_before:
             newstep = client.add_job_flow_steps(
                 JobFlowId="j-10NCLO6OLH3TD",
