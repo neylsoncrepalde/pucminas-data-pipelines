@@ -2,4 +2,4 @@
 
 Repositório com códigos para deploy automatizado do Airflow no Kubernetes
 
-MBA em Engenharia de Dados, PUC Minas, Maio 2022.
+MBA em Engenharia de Dados, PUC Minas.

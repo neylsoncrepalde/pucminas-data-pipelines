@@ -19,7 +19,7 @@ default_args = {
     'start_date': datetime(2022, 4, 2)
 }
 
-@dag(default_args=default_args, schedule_interval="*/15 * * * *", description="Executa um job Spark no EMR", catchup=False, tags=['Spark','EMR'])
+@dag(default_args=default_args, schedule_interval="@once", description="Executa um job Spark no EMR", catchup=False, tags=['Spark','EMR'])
 def indicadores_titanic():
 
     @task
@@ -30,19 +30,22 @@ def indicadores_titanic():
     def emr_process_titanic(success_before: bool):
         if success_before:
             newstep = client.add_job_flow_steps(
-                JobFlowId="j-10NCLO6OLH3TD",
-                Steps=[{
-                    'Name': 'Processa indicadores Titanic',
-                    'ActionOnFailure': "CONTINUE",
-                    'HadoopJarStep': {
-                        'Jar': 'command-runner.jar',
-                        'Args': ['spark-submit',
-                                 '--master', 'yarn',
-                                 '--deploy-mode', 'cluster',
-                                 's3://bucket-teste-539445819060/emr-code/pyspark/job_spark_titanic.py'
-                                 ]
+                JobFlowId="j-1037T3DHAN9EW",
+                Steps=[
+                    {
+                        'Name': 'Processa indicadores Titanic',
+                        'ActionOnFailure': "CONTINUE",
+                        'HadoopJarStep': {
+                            'Jar': 'command-runner.jar',
+                            'Args': ['spark-submit',
+                                    '--master', 'yarn',
+                                    '--deploy-mode', 'cluster',
+                                    '--packages', 'io.delta:delta-core_2.12:2.1.0',
+                                    's3://emr-code-539445819060/ney/pyspark/titanic_example_delta.py'
+                                    ]
+                        }
                     }
-                }]
+                ]
             )
             return newstep['StepIds'][0]
 
@@ -51,11 +54,11 @@ def indicadores_titanic():
         waiter = client.get_waiter('step_complete')
 
         waiter.wait(
-            ClusterId="j-10NCLO6OLH3TD",
+            ClusterId="j-1037T3DHAN9EW",
             StepId=stepId,
             WaiterConfig={
                 'Delay': 10,
-                'MaxAttempts': 120
+                'MaxAttempts': 600
             }
         )
         return True
