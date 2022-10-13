@@ -53,7 +53,7 @@ def indicadores_titanic():
                 'Ec2KeyName': 'ney-pucminas-testes',
                 'KeepJobFlowAliveWhenNoSteps': True,
                 'TerminationProtected': False,
-                'Ec2SubnetId': 'subnet-0f7a3b4c10819b73d'
+                'Ec2SubnetId': 'subnet-09b06b5d8fc0d0062'
             },
 
             Applications=[{'Name': 'Spark'}],
@@ -134,18 +134,23 @@ def indicadores_titanic():
         return newstep['StepIds'][0]
 
     @task
-    def wait_emr_job(stepId: str):
+    def wait_emr_job(cid: str, stepId: str):
         waiter = client.get_waiter('step_complete')
 
         waiter.wait(
-            ClusterId="j-1037T3DHAN9EW",
+            ClusterId=cid,
             StepId=stepId,
             WaiterConfig={
                 'Delay': 10,
                 'MaxAttempts': 600
             }
         )
-        return True
+    
+    @task
+    def terminate_emr_cluster(cid: str):
+        res = client.terminate_job_flows(
+            JobFlowIds=[cid]
+        )
 
     fim = DummyOperator(task_id="fim")
 
@@ -158,7 +163,10 @@ def indicadores_titanic():
     indicadores = emr_process_titanic(cluster)
     esperacluster >> indicadores
 
-    wait_step = wait_emr_job(indicadores)
+    wait_step = wait_emr_job(cluster, indicadores)
+    terminacluster = terminate_emr_cluster(cluster)
+    wait_step >> terminacluster
+
     wait_step >> fim
     #---------------
 
