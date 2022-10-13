@@ -22,32 +22,116 @@ default_args = {
 @dag(default_args=default_args, schedule_interval="@once", description="Executa um job Spark no EMR", catchup=False, tags=['Spark','EMR'])
 def indicadores_titanic():
 
+    inicio = DummyOperator(task_id='inicio')
+
     @task
-    def inicio():
+    def emr_create_cluster():
+        cluster_id = client.run_job_flow(
+            Name='Automated_EMR_Ney',
+            ServiceRole='EMR_DefaultRole',
+            JobFlowRole='EMR_EC2_DefaultRole',
+            VisibleToAllUsers=True,
+            LogUri='s3://aws-logs-539445819060-us-east-1/elasticmapreduce/',
+            ReleaseLabel='emr-6.8.0',
+            Instances={
+                'InstanceGroups': [
+                    {
+                        'Name': 'Master nodes',
+                        'Market': 'ON_DEMAND',
+                        'InstanceRole': 'MASTER',
+                        'InstanceType': 'm5.xlarge',
+                        'InstanceCount': 1,
+                    },
+                    {
+                        'Name': 'Worker nodes',
+                        'Market': 'ON_DEMAND',
+                        'InstanceRole': 'CORE',
+                        'InstanceType': 'm5.xlarge',
+                        'InstanceCount': 1,
+                    }
+                ],
+                'Ec2KeyName': 'ney-pucminas-testes',
+                'KeepJobFlowAliveWhenNoSteps': True,
+                'TerminationProtected': False,
+                'Ec2SubnetId': 'subnet-064aa7623d526f5e5'
+            },
+
+            Applications=[{'Name': 'Spark'}],
+
+            # Configurations=[
+            #     {
+            #         "Classification": "spark-env",
+            #         "Properties": {},
+            #         "Configurations": [{
+            #             "Classification": "export",
+            #             "Properties": {
+            #                 "PYSPARK_PYTHON": "/usr/bin/python3",
+            #                 "PYSPARK_DRIVER_PYTHON": "/usr/bin/python3"
+            #             }
+            #         }]
+            #     },
+            #     {
+            #         "Classification": "spark-hive-site",
+            #         "Properties": {
+            #             "hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
+            #         }
+            #     },
+            #     {
+            #         "Classification": "spark-defaults",
+            #         "Properties": {
+            #             "spark.submit.deployMode": "cluster",
+            #             "spark.speculation": "false",
+            #             "spark.sql.adaptive.enabled": "true",
+            #             "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
+            #         }
+            #     },
+            #     {
+            #         "Classification": "spark",
+            #         "Properties": {
+            #             "maximizeResourceAllocation": "true"
+            #         }
+            #     }
+            # ],
+        )
+        return cluster_id["JobFlowId"]
+
+
+    @task
+    def wait_emr_cluster(cid: str):
+        waiter = client.get_waiter('cluster_running')
+
+        waiter.wait(
+            ClusterId=cid,
+            WaiterConfig={
+                'Delay': 30,
+                'MaxAttempts': 120
+            }
+        )
         return True
+
+
     
     @task
-    def emr_process_titanic(success_before: bool):
-        if success_before:
-            newstep = client.add_job_flow_steps(
-                JobFlowId="j-1037T3DHAN9EW",
-                Steps=[
-                    {
-                        'Name': 'Processa indicadores Titanic',
-                        'ActionOnFailure': "CONTINUE",
-                        'HadoopJarStep': {
-                            'Jar': 'command-runner.jar',
-                            'Args': ['spark-submit',
-                                    '--master', 'yarn',
-                                    '--deploy-mode', 'cluster',
-                                    '--packages', 'io.delta:delta-core_2.12:2.1.0',
-                                    's3://emr-code-539445819060/ney/pyspark/titanic_example_delta.py'
-                                    ]
-                        }
+    def emr_process_titanic(cid: str):
+        newstep = client.add_job_flow_steps(
+            JobFlowId=cid,
+            Steps=[
+                {
+                    'Name': 'Processa indicadores Titanic',
+                    'ActionOnFailure': "CONTINUE",
+                    'HadoopJarStep': {
+                        'Jar': 'command-runner.jar',
+                        'Args': ['spark-submit',
+                                '--master', 'yarn',
+                                '--deploy-mode', 'cluster',
+                                '--packages', 'io.delta:delta-core_2.12:2.1.0',
+                                's3://emr-code-539445819060/ney/pyspark/titanic_example_delta.py'
+                                ]
                     }
-                ]
-            )
-            return newstep['StepIds'][0]
+                }
+            ]
+        )
+        return newstep['StepIds'][0]
 
     @task
     def wait_emr_job(stepId: str):
@@ -66,8 +150,14 @@ def indicadores_titanic():
     fim = DummyOperator(task_id="fim")
 
     # Orquestração
-    start = inicio()
-    indicadores = emr_process_titanic(start)
+    cluster = emr_create_cluster()
+    inicio >> cluster
+
+    esperacluster = wait_emr_cluster(cluster)
+
+    indicadores = emr_process_titanic(cluster)
+    esperacluster >> indicadores
+
     wait_step = wait_emr_job(indicadores)
     wait_step >> fim
     #---------------
