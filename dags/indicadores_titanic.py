@@ -1,5 +1,4 @@
 from airflow.decorators import task, dag
-from airflow.operators.python import PythonOperator
 from airflow.operators.dummy import DummyOperator
 from airflow.models import Variable
 from datetime import datetime
@@ -25,8 +24,12 @@ def indicadores_titanic():
     inicio = DummyOperator(task_id='inicio')
 
     @task
+    def tarefa_inicial():
+        print("Começou!!")
+
+    @task
     def emr_create_cluster():
-        cluster_id = client.run_job_flow(
+        cluster_id = client.run_job_flow( # Cria um cluster EMR
             Name='Automated_EMR_Ney',
             ServiceRole='EMR_DefaultRole',
             JobFlowRole='EMR_EC2_DefaultRole',
@@ -56,42 +59,7 @@ def indicadores_titanic():
                 'Ec2SubnetId': 'subnet-09b06b5d8fc0d0062'
             },
 
-            Applications=[{'Name': 'Spark'}],
-
-            # Configurations=[
-            #     {
-            #         "Classification": "spark-env",
-            #         "Properties": {},
-            #         "Configurations": [{
-            #             "Classification": "export",
-            #             "Properties": {
-            #                 "PYSPARK_PYTHON": "/usr/bin/python3",
-            #                 "PYSPARK_DRIVER_PYTHON": "/usr/bin/python3"
-            #             }
-            #         }]
-            #     },
-            #     {
-            #         "Classification": "spark-hive-site",
-            #         "Properties": {
-            #             "hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
-            #         }
-            #     },
-            #     {
-            #         "Classification": "spark-defaults",
-            #         "Properties": {
-            #             "spark.submit.deployMode": "cluster",
-            #             "spark.speculation": "false",
-            #             "spark.sql.adaptive.enabled": "true",
-            #             "spark.serializer": "org.apache.spark.serializer.KryoSerializer"
-            #         }
-            #     },
-            #     {
-            #         "Classification": "spark",
-            #         "Properties": {
-            #             "maximizeResourceAllocation": "true"
-            #         }
-            #     }
-            # ],
+            Applications=[{'Name': 'Spark'}, {'Name': 'Hive'}],
         )
         return cluster_id["JobFlowId"]
 
@@ -104,7 +72,7 @@ def indicadores_titanic():
             ClusterId=cid,
             WaiterConfig={
                 'Delay': 30,
-                'MaxAttempts': 120
+                'MaxAttempts': 60
             }
         )
         return True
@@ -155,15 +123,17 @@ def indicadores_titanic():
     fim = DummyOperator(task_id="fim")
 
     # Orquestração
+    tarefainicial = tarefa_inicial()
     cluster = emr_create_cluster()
-    inicio >> cluster
+    inicio >> tarefainicial >> cluster
 
     esperacluster = wait_emr_cluster(cluster)
 
-    indicadores = emr_process_titanic(cluster)
+    indicadores = emr_process_titanic(cluster) 
     esperacluster >> indicadores
 
     wait_step = wait_emr_job(cluster, indicadores)
+
     terminacluster = terminate_emr_cluster(cluster)
     wait_step >> terminacluster >> fim
     #---------------
