@@ -53,7 +53,7 @@ def indicadores_titanic():
                 'Ec2KeyName': 'ney-pucminas-testes',
                 'KeepJobFlowAliveWhenNoSteps': True,
                 'TerminationProtected': False,
-                'Ec2SubnetId': 'subnet-064aa7623d526f5e5'
+                'Ec2SubnetId': 'subnet-0f7a3b4c10819b73d'
             },
 
             Applications=[{'Name': 'Spark'}],
