@@ -9,6 +9,8 @@ spark = (
     .getOrCreate()
 )
 
+spark.sparkContext.setLogLevel("WARN")
+
 from delta.tables import *
 
 print("Reading CSV file from S3...")

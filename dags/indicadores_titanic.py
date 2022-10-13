@@ -165,9 +165,7 @@ def indicadores_titanic():
 
     wait_step = wait_emr_job(cluster, indicadores)
     terminacluster = terminate_emr_cluster(cluster)
-    wait_step >> terminacluster
-
-    wait_step >> fim
+    wait_step >> terminacluster >> fim
     #---------------
 
 execucao = indicadores_titanic()
